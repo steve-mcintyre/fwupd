@@ -8,6 +8,8 @@
 
 #include "fu-plugin-vfuncs.h"
 
+#include "fu-intel-spi-device.h"
+
 #include "fu-ifd-firmware.h"
 #include "fu-ifd-bios.h"
 
@@ -26,4 +28,8 @@ fu_plugin_init (FuPlugin *plugin)
 	fu_plugin_add_firmware_gtype (plugin, NULL, FU_TYPE_EFI_FIRMWARE_VOLUME);
 	fu_plugin_add_firmware_gtype (plugin, NULL, FU_TYPE_IFD_BIOS);
 	fu_plugin_add_firmware_gtype (plugin, NULL, FU_TYPE_IFD_FIRMWARE);
+	fu_plugin_add_udev_subsystem (plugin, "pci");
+	fu_plugin_add_possible_quirk_key (plugin, "IntelSpiBar");
+	fu_plugin_add_possible_quirk_key (plugin, "IntelSpiKind");
+	fu_plugin_set_device_gtype (plugin, FU_TYPE_INTEL_SPI_DEVICE);
 }

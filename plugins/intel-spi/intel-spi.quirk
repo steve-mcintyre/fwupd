@@ -1,0 +1,7 @@
+[PCI\VEN_8086&DEV_A150]
+Plugin = intel_spi
+Guid = INTEL_SPI_CHIPSET\SUNRISE_POINT
+
+[INTEL_SPI_CHIPSET\SUNRISE_POINT]
+IntelSpiKind = pch
+IntelSpiBar = 0xfe010000
