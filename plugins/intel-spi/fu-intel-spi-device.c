@@ -14,6 +14,8 @@
 
 #include <gio/gunixinputstream.h>
 
+#include "fu-plugin-vfuncs.h"
+
 #include "fu-intel-spi-common.h"
 #include "fu-intel-spi-device.h"
 
@@ -142,6 +144,41 @@ fu_intel_spi_device_read_reg (FuIntelSpiDevice *self, guint8 section, guint16 of
 	control |= (((guint32) offset) << 2) & FDOC_FDSI;
 	fu_mmio_write32_le (self->spibar, PCH100_REG_FDOC, control);
 	return fu_mmio_read32_le (self->spibar, PCH100_REG_FDOD);
+}
+
+static void
+fu_intel_spi_device_add_security_attrs (FuDevice *device, FuSecurityAttrs *attrs)
+{
+	FuIntelSpiDevice *self = FU_INTEL_SPI_DEVICE (device);
+	FuIfdAccess access_global = FU_IFD_ACCESS_NONE;
+	g_autoptr(FwupdSecurityAttr) attr = NULL;
+
+	/* create attr */
+	attr = fwupd_security_attr_new (FWUPD_SECURITY_ATTR_ID_SPI_DESCRIPTOR);
+	fwupd_security_attr_set_plugin (attr, fu_device_get_plugin (FU_DEVICE (self)));
+	fwupd_security_attr_set_level (attr, FWUPD_SECURITY_ATTR_LEVEL_CRITICAL);
+	fu_security_attrs_append (attrs, attr);
+
+	/* check for read access from other regions */
+	for (guint j = FU_IFD_REGION_BIOS; j < 4; j++) {
+		FuIfdAccess access;
+		access = fu_ifd_region_to_access (FU_IFD_REGION_DESC,
+						  self->flash_master[j-1], TRUE);
+		fwupd_security_attr_add_metadata (attr,
+						  fu_ifd_region_to_string (j),
+						  fu_ifd_access_to_string (access));
+		access_global |= access;
+	}
+
+	/* any region can write to the flash descriptor */
+	if (access_global & FU_IFD_ACCESS_WRITE) {
+		fwupd_security_attr_set_result (attr, FWUPD_SECURITY_ATTR_RESULT_NOT_VALID);
+		return;
+	}
+
+	/* success */
+	fwupd_security_attr_add_flag (attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
+	fwupd_security_attr_set_result (attr, FWUPD_SECURITY_ATTR_RESULT_LOCKED);
 }
 
 static gboolean
@@ -375,4 +412,5 @@ fu_intel_spi_device_class_init (FuIntelSpiDeviceClass *klass)
 	klass_device->open = fu_intel_spi_device_open;
 	klass_device->close = fu_intel_spi_device_close;
 	klass_device->set_quirk_kv = fu_intel_spi_device_set_quirk_kv;
+	klass_device->add_security_attrs = fu_intel_spi_device_add_security_attrs;
 }
