@@ -17,6 +17,8 @@
 #include "fu-intel-spi-common.h"
 #include "fu-intel-spi-device.h"
 
+#include "fu-ifd-common.h"
+#include "fu-ifd-device.h"
 #include "fu-ifd-firmware.h"
 
 struct _FuIntelSpiDevice {
@@ -174,7 +176,7 @@ fu_intel_spi_device_setup (FuDevice *device, GError **error)
 	/* read from descriptor */
 	self->hsfs = fu_mmio_read16 (self->spibar, ICH9_REG_HSFS);
 	self->frap = fu_mmio_read16 (self->spibar, ICH9_REG_FRAP);
-	for (guint i = 0; i < 4; i++)
+	for (guint i = FU_IFD_REGION_DESC; i < 4; i++)
 		self->freg[i] = fu_mmio_read32 (self->spibar, ICH9_REG_FREG0 + i * 4);
 	self->flvalsig = fu_intel_spi_device_read_reg (self, 0, 0);
 	self->flmap0 = fu_intel_spi_device_read_reg (self, 0, 1);
@@ -192,6 +194,16 @@ fu_intel_spi_device_setup (FuDevice *device, GError **error)
 	if (comp2_density != 0xf)
 		total_size += 1 << (19 + comp2_density);
 	fu_device_set_firmware_size (device, total_size);
+
+	/* add children */
+	for (guint i = FU_IFD_REGION_BIOS; i < 4; i++) {
+		g_autoptr(FuDevice) child = NULL;
+		if (self->freg[i] == 0x0)
+			continue;
+		child = fu_ifd_device_new (i, self->freg[i]);
+		fu_device_add_child (device, child);
+	}
+
 	return TRUE;
 }
 
@@ -226,19 +238,21 @@ fu_intel_spi_device_set_addr (FuIntelSpiDevice *self, guint32 addr)
 	fu_mmio_write32 (self->spibar, ICH9_REG_FADDR, (addr & PCH100_FADDR_FLA) | addr_old);
 }
 
-static GBytes *
-fu_intel_spi_device_dump_firmware (FuDevice *device, GError **error)
+GBytes *
+fu_intel_spi_device_dump (FuIntelSpiDevice *self,
+			  FuDevice *device,
+			  guint32 offset,
+			  guint32 length,
+			  GError **error)
 {
-	FuIntelSpiDevice *self = FU_INTEL_SPI_DEVICE (device);
-	guint64 total_size = fu_device_get_firmware_size_max (device);
 	guint8 block_len = 0x40;
-	g_autoptr(GByteArray) buf = g_byte_array_sized_new (total_size);
+	g_autoptr(GByteArray) buf = g_byte_array_sized_new (length);
 
 	/* set FDONE, FCERR, AEL */
 	fu_device_set_status (device, FWUPD_STATUS_DEVICE_READ);
 	fu_mmio_write16 (self->spibar, ICH9_REG_HSFS,
 			 fu_mmio_read16 (self->spibar, ICH9_REG_HSFS));
-	for (guint32 addr = 0; addr < total_size; addr += block_len) {
+	for (guint32 addr = offset; addr < offset + length; addr += block_len) {
 		guint16 hsfc;
 		guint32 buftmp32 = 0;
 
@@ -265,11 +279,21 @@ fu_intel_spi_device_dump_firmware (FuDevice *device, GError **error)
 		}
 
 		/* progress */
-		fu_device_set_progress_full (device, addr + block_len, total_size);
+		fu_device_set_progress_full (device, addr - offset + block_len, length);
 	}
 
 	/* success */
 	return g_byte_array_free_to_bytes (g_steal_pointer (&buf));
+}
+
+static GBytes *
+fu_intel_spi_device_dump_firmware (FuDevice *device, GError **error)
+{
+	FuIntelSpiDevice *self = FU_INTEL_SPI_DEVICE (device);
+	guint64 total_size = fu_device_get_firmware_size_max (device);
+	return fu_intel_spi_device_dump (self, device,
+						       0x0, total_size,
+						       error);
 }
 
 static FuFirmware *

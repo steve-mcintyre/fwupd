@@ -16,6 +16,7 @@ shared_module('fu_plugin_intel_spi',
     'fu-efi-firmware-volume.c',     # fuzzing
     'fu-ifd-bios.c',                # fuzzing
     'fu-ifd-common.c',              # fuzzing
+    'fu-ifd-device.c',
     'fu-ifd-firmware.c',            # fuzzing
     'fu-ifd-image.c',               # fuzzing
     'fu-intel-spi-common.c',
