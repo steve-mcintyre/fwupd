@@ -18,6 +18,7 @@
 
 #define ICH9_REG_FRAP		0x50
 #define ICH9_REG_FREG0		0x54
+#define ICH9_REG_PR0		0x74
 #define ICH9_REG_FDOC		0xB0
 #define ICH9_REG_FDOD		0xB4
 

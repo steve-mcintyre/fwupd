@@ -39,6 +39,7 @@ struct _FuIntelSpiDevice {
 	guint32			 illegal_jedec;
 	guint32			 flpb;
 	guint32			 flash_master[4];
+	guint32			 protected_range[4];
 };
 
 #define FU_INTEL_SPI_PHYS_SPIBAR_SIZE		0x10000	/* bytes */
@@ -70,6 +71,28 @@ fu_intel_spi_device_to_string (FuDevice *device, guint idt, GString *str)
 	fu_common_string_append_kx (str, idt, "FLCOMP", self->components_rcd);
 	fu_common_string_append_kx (str, idt, "FLILL", self->illegal_jedec);
 	fu_common_string_append_kx (str, idt, "FLPB", self->flpb);
+
+	/* PRx */
+	for (guint i = 0; i < 4; i++) {
+		guint32 limit = 0;
+		guint32 base = 0;
+		FuIfdAccess access = FU_IFD_ACCESS_NONE;
+		g_autofree gchar *title = g_strdup_printf ("PR%u", i);
+		g_autofree gchar *tmp = g_strdup_printf ("PR%u", i);
+		if ((self->protected_range[i] >> 31) & 0b1)
+			access |= FU_IFD_ACCESS_WRITE;
+		if ((self->protected_range[i] >> 15) & 0b1)
+			access |= FU_IFD_ACCESS_READ;
+		if (access != FU_IFD_ACCESS_NONE) {
+			base = ((self->protected_range[i] >> 0) & 0x1FFF) << 12;
+			limit = (((self->protected_range[i] >> 16) & 0x1FFF) << 12) | 0xFFFF;
+		}
+		tmp = g_strdup_printf ("blocked %s from 0x%x to 0x%x [0x%x]",
+				       fu_ifd_access_to_string (access),
+				       base, limit,
+				       self->protected_range[i]);
+		fu_common_string_append_kv (str, idt, title, tmp);
+	}
 }
 
 static gboolean
@@ -212,6 +235,7 @@ fu_intel_spi_device_setup (FuDevice *device, GError **error)
 	guint64 total_size = 0;
 	guint8 comp1_density;
 	guint8 comp2_density;
+	guint16 reg_pr0 = self->kind == FU_INTEL_SPI_KIND_ICH ? ICH9_REG_PR0 : PCH100_REG_FPR0;
 
 	/* dump everything */
 	if (g_getenv ("FWUPD_INTEL_SPI_VERBOSE") != NULL) {
@@ -236,6 +260,10 @@ fu_intel_spi_device_setup (FuDevice *device, GError **error)
 
 	for (guint i = 0; i < 4; i++)
 		self->flash_master[i] = fu_intel_spi_device_read_reg (self, 3, i);
+	for (guint i = 0; i < 4; i++) {
+		self->protected_range[i] = fu_mmio_read32 (self->spibar,
+							   reg_pr0 + i * sizeof(guint32));
+	}
 
 	/* set size */
 	comp1_density = (self->components_rcd & 0x0f) >> 0;
