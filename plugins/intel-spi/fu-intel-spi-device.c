@@ -14,7 +14,10 @@
 
 #include <gio/gunixinputstream.h>
 
+#include "fu-device-locker.h"
 #include "fu-plugin-vfuncs.h"
+
+#include "fu-pci-device.h"
 
 #include "fu-intel-spi-common.h"
 #include "fu-intel-spi-device.h"
@@ -26,6 +29,7 @@
 struct _FuIntelSpiDevice {
 	FuDevice		 parent_instance;
 	FuIntelSpiKind		 kind;
+	gchar			*spibar_proxy;
 	guint32			 phys_spibar;
 	gpointer		 spibar;
 	guint16			 hsfs;
@@ -44,6 +48,8 @@ struct _FuIntelSpiDevice {
 
 #define FU_INTEL_SPI_PHYS_SPIBAR_SIZE		0x10000	/* bytes */
 #define FU_INTEL_SPI_READ_TIMEOUT		10	/* ms */
+
+#define PCI_BASE_ADDRESS_0			0x0010
 
 G_DEFINE_TYPE (FuIntelSpiDevice, fu_intel_spi_device, FU_TYPE_DEVICE)
 
@@ -224,6 +230,40 @@ fu_intel_spi_device_probe (FuDevice *device, GError **error)
 		return FALSE;
 	}
 
+	/* use a hidden PCI device to get the RCBA */
+	if (self->spibar_proxy != NULL) {
+		g_autoptr(FuDevice) pcidev = NULL;
+		g_autoptr(FuDeviceLocker) locker = NULL;
+
+		/* get SPIBAR from a hidden (VID set to 0xFFFF) PCI device */
+		pcidev = fu_pci_device_new (self->spibar_proxy, error);
+		if (pcidev == NULL)
+			return FALSE;
+		locker = fu_device_locker_new (pcidev, error);
+		if (locker == NULL)
+			return FALSE;
+		self->phys_spibar = fu_pci_device_read_config (FU_PCI_DEVICE (pcidev),
+							       PCI_BASE_ADDRESS_0);
+		if (self->phys_spibar == 0 ||
+		    self->phys_spibar == G_MAXUINT32) {
+			g_set_error (error,
+				     G_IO_ERROR,
+				     G_IO_ERROR_NOT_SUPPORTED,
+				     "SPIBAR not valid: 0x%x",
+				     self->phys_spibar);
+			return FALSE;
+		}
+	}
+
+	/* specified explicitly as a physical address */
+	if (self->phys_spibar == 0) {
+		g_set_error_literal (error,
+				     G_IO_ERROR,
+				     G_IO_ERROR_NOT_SUPPORTED,
+				     "IntelSpiBar not set");
+		return FALSE;
+	}
+
 	/* success */
 	return TRUE;
 }
@@ -235,7 +275,7 @@ fu_intel_spi_device_setup (FuDevice *device, GError **error)
 	guint64 total_size = 0;
 	guint8 comp1_density;
 	guint8 comp2_density;
-	guint16 reg_pr0 = self->kind == FU_INTEL_SPI_KIND_ICH ? ICH9_REG_PR0 : PCH100_REG_FPR0;
+	guint16 reg_pr0 = fu_device_has_custom_flag (device, "ICH") ? ICH9_REG_PR0 : PCH100_REG_FPR0;
 
 	/* dump everything */
 	if (g_getenv ("FWUPD_INTEL_SPI_VERBOSE") != NULL) {
@@ -407,6 +447,10 @@ fu_intel_spi_device_set_quirk_kv (FuDevice *device,
 		return TRUE;
 	}
 	if (g_strcmp0 (key, "IntelSpiKind") == 0) {
+		g_autofree gchar *instance_id = NULL;
+		g_autofree gchar *kind_up = NULL;
+
+		/* validate */
 		self->kind = fu_intel_spi_kind_from_string (value);
 		if (self->kind == FU_INTEL_SPI_KIND_UNKNOWN) {
 			g_set_error (error,
@@ -416,6 +460,15 @@ fu_intel_spi_device_set_quirk_kv (FuDevice *device,
 				     value);
 			return FALSE;
 		}
+
+		/* get things like SPIBAR */
+		kind_up = g_ascii_strup (value, -1);
+		instance_id = g_strdup_printf ("INTEL_SPI_CHIPSET\\%s", kind_up);
+		fu_device_add_instance_id (device, instance_id);
+		return TRUE;
+	}
+	if (g_strcmp0 (key, "IntelSpiBarProxy") == 0) {
+		self->spibar_proxy = g_strdup (value);
 		return TRUE;
 	}
 	g_set_error_literal (error,

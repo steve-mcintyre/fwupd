@@ -21,6 +21,7 @@ shared_module('fu_plugin_intel_spi',
     'fu-ifd-image.c',               # fuzzing
     'fu-intel-spi-common.c',
     'fu-intel-spi-device.c',
+    'fu-pci-device.c',
     'fu-plugin-intel-spi.c',
   ],
   include_directories : [
