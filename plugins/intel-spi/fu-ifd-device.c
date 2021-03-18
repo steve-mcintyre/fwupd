@@ -17,6 +17,7 @@ typedef struct {
 	FuDevice		 parent_instance;
 	FuIfdRegion		 region;
 	guint32			 offset;
+	FuIfdAccess		 access[FU_IFD_REGION_MAX];
 } FuIfdDevicePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (FuIfdDevice, fu_ifd_device, FU_TYPE_DEVICE)
@@ -51,6 +52,13 @@ fu_ifd_device_set_freg (FuIfdDevice *self, guint32 freg)
 	fu_device_set_firmware_size (FU_DEVICE (self), freg_size);
 }
 
+void
+fu_ifd_device_set_access (FuIfdDevice *self, FuIfdRegion region, FuIfdAccess access)
+{
+	FuIfdDevicePrivate *priv = GET_PRIVATE (self);
+	priv->access[region] = access;
+}
+
 static gboolean
 fu_ifd_device_open (FuDevice *device, GError **error)
 {
@@ -72,6 +80,16 @@ fu_ifd_device_to_string (FuDevice *device, guint idt, GString *str)
 	fu_common_string_append_kv (str, idt, "Region",
 				    fu_ifd_region_to_string (priv->region));
 	fu_common_string_append_kx (str, idt, "Offset", priv->offset);
+
+	for (guint i = 0; i < FU_IFD_REGION_MAX; i++) {
+		g_autofree gchar *title = NULL;
+		if (priv->access[i] == FU_IFD_ACCESS_NONE)
+			continue;
+		title = g_strdup_printf ("Access[%s]", fu_ifd_region_to_string (i));
+		fu_common_string_append_kv (str, idt, title,
+					    fu_ifd_access_to_string (priv->access[i]));
+	}
+
 }
 
 static GBytes *

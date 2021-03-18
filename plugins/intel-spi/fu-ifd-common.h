@@ -34,3 +34,7 @@ typedef enum {
 const gchar	*fu_ifd_region_to_string	(FuIfdRegion	 region);
 const gchar	*fu_ifd_region_to_name		(FuIfdRegion	 region);
 const gchar	*fu_ifd_access_to_string	(FuIfdAccess	 access);
+
+FuIfdAccess	 fu_ifd_region_to_access	(FuIfdRegion	 region,
+						 guint32	 flash_master,
+						 gboolean	 is_skylake);

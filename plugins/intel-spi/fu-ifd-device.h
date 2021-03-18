@@ -19,3 +19,6 @@ struct _FuIfdDeviceClass
 
 FuDevice	*fu_ifd_device_new			(FuIfdRegion	 region,
 							 guint32	 freg);
+void		 fu_ifd_device_set_access		(FuIfdDevice	*self,
+							 FuIfdRegion	 region,
+							 FuIfdAccess	 access);

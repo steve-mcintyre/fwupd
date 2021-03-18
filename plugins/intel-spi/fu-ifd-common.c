@@ -93,6 +93,8 @@ fu_ifd_region_to_name (FuIfdRegion region)
 const gchar *
 fu_ifd_access_to_string (FuIfdAccess access)
 {
+	if (access == FU_IFD_ACCESS_NONE)
+		return "--";
 	if (access == FU_IFD_ACCESS_READ)
 		return "ro";
 	if (access == FU_IFD_ACCESS_WRITE)
@@ -100,4 +102,36 @@ fu_ifd_access_to_string (FuIfdAccess access)
 	if (access == (FU_IFD_ACCESS_READ | FU_IFD_ACCESS_WRITE))
 		return "rw";
 	return NULL;
+}
+
+FuIfdAccess
+fu_ifd_region_to_access (FuIfdRegion region, guint32 flash_master, gboolean is_skylake)
+{
+	guint8 bit_r = 0;
+	guint8 bit_w = 0;
+
+	/* new layout */
+	if (is_skylake) {
+		bit_r = (flash_master >> (region + 8)) & 0b1;
+		bit_w = (flash_master >> (region + 20)) & 0b1;
+		return (bit_r ? FU_IFD_ACCESS_READ : FU_IFD_ACCESS_NONE) |
+			(bit_w ? FU_IFD_ACCESS_WRITE : FU_IFD_ACCESS_NONE);
+	}
+
+	/* old layout */
+	if (region == FU_IFD_REGION_DESC) {
+		bit_r = 16;
+		bit_w = 24;
+	} else if (region == FU_IFD_REGION_BIOS) {
+		bit_r = 17;
+		bit_w = 25;
+	} else if (region == FU_IFD_REGION_ME) {
+		bit_r = 18;
+		bit_w = 26;
+	} else if (region == FU_IFD_REGION_GBE) {
+		bit_r = 19;
+		bit_w = 27;
+	}
+	return ((flash_master >> bit_r) & 0b1 ? FU_IFD_ACCESS_READ : FU_IFD_ACCESS_NONE) |
+		((flash_master >> bit_w) & 0b1 ? FU_IFD_ACCESS_WRITE : FU_IFD_ACCESS_NONE);
 }

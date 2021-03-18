@@ -30,12 +30,13 @@ struct _FuIntelSpiDevice {
 	guint16			 frap;
 	guint32			 freg[4];
 	guint32			 flvalsig;
-	guint32			 flmap0;
-	guint32			 flmap1;
-	guint32			 flmap2;
-	guint32			 flcomp;
-	guint32			 flill;
+	guint32			 descriptor_map0;
+	guint32			 descriptor_map1;
+	guint32			 descriptor_map2;
+	guint32			 components_rcd;
+	guint32			 illegal_jedec;
 	guint32			 flpb;
+	guint32			 flash_master[4];
 };
 
 #define FU_INTEL_SPI_PHYS_SPIBAR_SIZE		0x10000	/* bytes */
@@ -56,12 +57,16 @@ fu_intel_spi_device_to_string (FuDevice *device, guint idt, GString *str)
 		g_autofree gchar *title = g_strdup_printf ("FREG%u", i);
 		fu_common_string_append_kx (str, idt, title, self->freg[i]);
 	}
+	for (guint i = 0; i < 4; i++) {
+		g_autofree gchar *title = g_strdup_printf ("FLMSTR%u", i);
+		fu_common_string_append_kx (str, idt, title, self->flash_master[i]);
+	}
 	fu_common_string_append_kx (str, idt, "FLVALSIG", self->flvalsig);
-	fu_common_string_append_kx (str, idt, "FLMAP0", self->flmap0);
-	fu_common_string_append_kx (str, idt, "FLMAP1", self->flmap1);
-	fu_common_string_append_kx (str, idt, "FLMAP2", self->flmap2);
-	fu_common_string_append_kx (str, idt, "FLCOMP", self->flcomp);
-	fu_common_string_append_kx (str, idt, "FLILL", self->flill);
+	fu_common_string_append_kx (str, idt, "FLMAP0", self->descriptor_map0);
+	fu_common_string_append_kx (str, idt, "FLMAP1", self->descriptor_map1);
+	fu_common_string_append_kx (str, idt, "FLMAP2", self->descriptor_map2);
+	fu_common_string_append_kx (str, idt, "FLCOMP", self->components_rcd);
+	fu_common_string_append_kx (str, idt, "FLILL", self->illegal_jedec);
 	fu_common_string_append_kx (str, idt, "FLPB", self->flpb);
 }
 
@@ -179,18 +184,21 @@ fu_intel_spi_device_setup (FuDevice *device, GError **error)
 	for (guint i = FU_IFD_REGION_DESC; i < 4; i++)
 		self->freg[i] = fu_mmio_read32 (self->spibar, ICH9_REG_FREG0 + i * 4);
 	self->flvalsig = fu_intel_spi_device_read_reg (self, 0, 0);
-	self->flmap0 = fu_intel_spi_device_read_reg (self, 0, 1);
-	self->flmap1 = fu_intel_spi_device_read_reg (self, 0, 2);
-	self->flmap2 = fu_intel_spi_device_read_reg (self, 0, 3);
-	self->flcomp = fu_intel_spi_device_read_reg (self, 1, 0);
-	self->flill = fu_intel_spi_device_read_reg (self, 1, 1);
+	self->descriptor_map0 = fu_intel_spi_device_read_reg (self, 0, 1);
+	self->descriptor_map1 = fu_intel_spi_device_read_reg (self, 0, 2);
+	self->descriptor_map2 = fu_intel_spi_device_read_reg (self, 0, 3);
+	self->components_rcd = fu_intel_spi_device_read_reg (self, 1, 0);
+	self->illegal_jedec = fu_intel_spi_device_read_reg (self, 1, 1);
 	self->flpb = fu_intel_spi_device_read_reg (self, 1, 2);
 
+	for (guint i = 0; i < 4; i++)
+		self->flash_master[i] = fu_intel_spi_device_read_reg (self, 3, i);
+
 	/* set size */
-	comp1_density = (self->flcomp & 0x0f) >> 0;
+	comp1_density = (self->components_rcd & 0x0f) >> 0;
 	if (comp1_density != 0xf)
 		total_size += 1 << (19 + comp1_density);
-	comp2_density = (self->flcomp & 0xf0) >> 4;
+	comp2_density = (self->components_rcd & 0xf0) >> 4;
 	if (comp2_density != 0xf)
 		total_size += 1 << (19 + comp2_density);
 	fu_device_set_firmware_size (device, total_size);
@@ -201,6 +209,11 @@ fu_intel_spi_device_setup (FuDevice *device, GError **error)
 		if (self->freg[i] == 0x0)
 			continue;
 		child = fu_ifd_device_new (i, self->freg[i]);
+		for (guint j = 1; j < 4; j++) {
+			FuIfdAccess access;
+			access = fu_ifd_region_to_access (i, self->flash_master[j-1], TRUE);
+			fu_ifd_device_set_access (FU_IFD_DEVICE (child), j, access);
+		}
 		fu_device_add_child (device, child);
 	}
 
