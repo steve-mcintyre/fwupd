@@ -176,6 +176,12 @@ fu_intel_spi_device_add_security_attrs (FuDevice *device, FuSecurityAttrs *attrs
 		return;
 	}
 
+	/* FLOCKDN is unset */
+	if ((self->hsfs >> 15 & 0b1) == 0) {
+		fwupd_security_attr_set_result (attr, FWUPD_SECURITY_ATTR_RESULT_NOT_LOCKED);
+		return;
+	}
+
 	/* success */
 	fwupd_security_attr_add_flag (attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
 	fwupd_security_attr_set_result (attr, FWUPD_SECURITY_ATTR_RESULT_LOCKED);

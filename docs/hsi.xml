@@ -397,6 +397,8 @@
       <title>Read-only SPI Descriptor</title>
       <para>
         The SPI descriptor must always be read only from all other IFD regions.
+        Additionally the FLOCKDN register must be set to prevent configuration
+        registers in the SPI BAR from being changed.
       </para>
       <itemizedlist>
         <listitem>
