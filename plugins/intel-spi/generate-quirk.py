@@ -35,7 +35,7 @@ if __name__ == "__main__":
         "poulsbo": Chipset(flags="ICH", bios_cntl=0xD8),
     }
 
-    devices = {}
+    devices = {"PCI\VEN_8086&DEV_A0A4": "pch100"}
 
     with open("intel-spi.quirk", "w") as out_f:
         with open(sys.argv[1], "r") as in_f:
